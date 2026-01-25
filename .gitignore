@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+.cursor/
+
+# Build artifacts (keep .xpi for releases)
+# *.xpi
+
+# Environment
+.env
+.env.local
+
+# Python (legacy)
+__pycache__/
+*.pyc
+*.pyo

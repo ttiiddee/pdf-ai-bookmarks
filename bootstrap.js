@@ -11,6 +11,17 @@ function install() {
 async function startup({ id, version, rootURI }) {
     log("Starting " + version);
 
+    // Register preferences pane
+    Zotero.PreferencePanes.register({
+        pluginID: 'pdf-ai-bookmarks@antigravity.com',
+        src: rootURI + 'preferences.xhtml',
+        scripts: [rootURI + 'preferences.js']
+    });
+
+    // Load pdf-lib library
+    Services.scriptloader.loadSubScript(rootURI + 'lib/pdf-lib.js');
+
+    // Load main plugin logic
     Services.scriptloader.loadSubScript(rootURI + 'pdf-ai-bookmarks.js');
     PDFAIBookmarks.init({ id, version, rootURI });
     PDFAIBookmarks.addToAllWindows();
