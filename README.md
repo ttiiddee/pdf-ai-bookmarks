@@ -12,7 +12,7 @@ A Zotero 8 plugin that automatically generates hierarchical PDF bookmarks (outli
 
 ## Installation
 
-1. Download the latest `pdf-ai-bookmarks.xpi` from the [Releases](https://github.com/yourusername/pdf-ai-bookmarks/releases) page
+1. Download the latest `pdf-ai-bookmarks.xpi` from the [Releases](https://github.com/edwintuan/pdf-ai-bookmarks/releases) page
 2. In Zotero, go to **Tools → Add-ons**
 3. Click the gear icon and select **Install Add-on From File...**
 4. Select the downloaded `.xpi` file
