@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "PDF AI Bookmarks",
+  "version": "1.0.0",
+  "description": "Generate AI-powered bookmarks for PDFs using Gemini.",
+  "applications": {
+    "zotero": {
+      "id": "pdf-ai-bookmarks@antigravity.com",
+      "update_url": "https://example.com/updates.json",
+      "strict_min_version": "7.0",
+      "strict_max_version": "8.*"
+    }
+  }
+}
