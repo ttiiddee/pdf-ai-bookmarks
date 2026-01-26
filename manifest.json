@@ -5,8 +5,8 @@
   "description": "Generate AI-powered bookmarks for PDFs using Gemini.",
   "applications": {
     "zotero": {
-      "id": "pdf-ai-bookmarks@antigravity.com",
-      "update_url": "https://example.com/updates.json",
+      "id": "pdf-ai-bookmarks@edwintuan.com",
+      "update_url": "https://github.com/edwintuan/pdf-ai-bookmarks/releases/download/xpi/pdf-ai-bookmarks.xpi",
       "strict_min_version": "7.0",
       "strict_max_version": "8.*"
     }
