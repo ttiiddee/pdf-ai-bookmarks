@@ -6,7 +6,7 @@
   "applications": {
     "zotero": {
       "id": "pdf-ai-bookmarks@edwintuan.com",
-      "update_url": "https://github.com/edwintuan/pdf-ai-bookmarks/releases/download/xpi/pdf-ai-bookmarks.xpi",
+      "update_url": "https://github.com/edwintuan/pdf-ai-bookmarks/blob/main/update.json",
       "strict_min_version": "7.0",
       "strict_max_version": "8.*"
     }
