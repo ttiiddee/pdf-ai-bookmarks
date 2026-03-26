@@ -5,9 +5,11 @@ window.PDFAIBookmarks_Preferences = {
         try {
             const modelSelect = document.getElementById("pdf-ai-bookmarks-model");
             const customModelRow = document.getElementById("custom-model-row");
+            const enablePageLabelCheckbox = document.getElementById("pdf-ai-bookmarks-enable-page-label");
+            const detectMissingPagesCheckbox = document.getElementById("pdf-ai-bookmarks-detect-missing-pages");
 
             // 1. 安全退出机制：
-            // 如果用户点开的是 Zotero 的"常规"或"同步"等其他页面，这两个元素是不存在的。
+            // 如果用户点开的是 Zotero 的"常规"或"同步"等其他页面，这些元素是不存在的。
             // 此时必须立刻 return 退出，避免报错影响其他设置面板。
             if (!modelSelect || !customModelRow) {
                 return;
@@ -31,6 +33,26 @@ window.PDFAIBookmarks_Preferences = {
 
             // 5. 绑定新监听 (menulist 使用 command 事件)
             modelSelect.addEventListener("command", toggleCustomRow);
+
+            // 6. Page Label 和 缺失页检测 联动逻辑
+            if (enablePageLabelCheckbox && detectMissingPagesCheckbox) {
+                // 初始状态：根据 enablePageLabel 决定是否禁用 detectMissingPages
+                const initialEnablePageLabel = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.enablePageLabel', true);
+                detectMissingPagesCheckbox.disabled = !initialEnablePageLabel;
+
+                // 监听 enablePageLabel 变化
+                const toggleDetectMissingPages = (e) => {
+                    const isEnabled = e.target.checked;
+                    detectMissingPagesCheckbox.disabled = !isEnabled;
+                    if (!isEnabled) {
+                        // 如果禁用 page label，同时取消勾选 detectMissingPages
+                        detectMissingPagesCheckbox.checked = false;
+                    }
+                };
+
+                enablePageLabelCheckbox.removeEventListener("command", toggleDetectMissingPages);
+                enablePageLabelCheckbox.addEventListener("command", toggleDetectMissingPages);
+            }
 
             Zotero.debug("My PDF AI Bookmarks: 设置面板 UI 联动加载完毕");
 

@@ -40,6 +40,14 @@ PDFAIBookmarks = {
         return Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.polish', true) !== false;
     },
 
+    shouldSetPageLabel() {
+        return Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.enablePageLabel', true) === true;
+    },
+
+    shouldDetectMissingPages() {
+        return Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.detectMissingPages', true) === true;
+    },
+
     normalizePath(path) {
         if (!path) return null;
 
@@ -146,6 +154,8 @@ PDFAIBookmarks = {
 
     buildPrompt(existingToc, opts = {}) {
         const shouldPolish = this.shouldPolish();
+        const shouldSetPageLabel = this.shouldSetPageLabel();
+        const shouldDetectMissingPages = this.shouldDetectMissingPages();
         const { totalPages, chunkStart, chunkEnd } = opts;
 
         let prompt = `You are an expert PDF editor. Your task is to generate a comprehensive Table of Contents (bookmarks/outline) for the provided PDF file.
@@ -154,20 +164,34 @@ Rules:
 1. Read the entire document to understand its structure.
 2. Generate a list of bookmarks with accurate page numbers.
 3. 'page_number' must be the PHYSICAL page number in the PDF (starting from 1).
-4. 'level' indicates the hierarchy: 1 for chapters, 2 for sections, 3 for subsections.
-5. Output MUST be a valid JSON array matching the schema: [{"title": "Chapter 1", "page_number": 5, "level": 1}, ...]
-6. Additionally, include 'page_label_ranges' to describe page numbering patterns (roman numerals, arabic numbers, cover pages without numbers, etc.).
+4. 'level' indicates the hierarchy: 1 for chapters, 2 for sections, 3 for subsections.`;
 
-CRITICAL RULES FOR page_label_ranges:
+        // 根据设置决定是否包含 page_label_ranges 相关内容
+        if (shouldSetPageLabel) {
+            prompt += `\n5. Additionally, include 'page_label_ranges' to describe page numbering patterns (roman numerals, arabic numbers, cover pages without numbers, etc.).`;
+
+            if (shouldDetectMissingPages) {
+                prompt += `\n\nCRITICAL RULES FOR page_label_ranges (with missing page detection):
 - Detect cover pages, title pages, and other pages that should NOT display page numbers. Use style "none" for these.
 - The first content page often starts with roman numeral "i" or arabic "1", even if it's not physical page 1.
 - Use "start" field to specify the starting number for each range.
+- IMPORTANT: Also detect any MISSING pages in the document. If the page numbering skips (e.g., jumps from page 10 to page 15), note this in your analysis.`;
+            } else {
+                prompt += `\n\nCRITICAL RULES FOR page_label_ranges (page format only, NO missing page detection):
+- Detect cover pages, title pages, and other pages that should NOT display page numbers. Use style "none" for these.
+- The first content page often starts with roman numeral "i" or arabic "1", even if it's not physical page 1.
+- Use "start" field to specify the starting number for each range.
+- ONLY identify the page numbering format (roman, arabic, none). DO NOT detect or report missing pages.`;
+            }
 
-Examples of page_label_ranges:
+            prompt += `\n\nExamples of page_label_ranges:
 - [{"start_page": 1, "style": "none"}, {"start_page": 2, "style": "roman", "start": 1}, {"start_page": 10, "style": "arabic", "start": 1}]
   // Page 1: cover (no label), Pages 2-9: roman numerals i-viii, Pages 10+: arabic 1, 2, 3...
 - [{"start_page": 1, "style": "roman", "start": 1}, {"start_page": 15, "style": "arabic", "start": 1}]
   // Pages 1-14: roman numerals i-xiv, Pages 15+: arabic 1, 2, 3...`;
+        } else {
+            prompt += `\n5. Output MUST be a valid JSON array matching the schema: [{"title": "Chapter 1", "page_number": 5, "level": 1}, ...]`;
+        }
 
         if (shouldPolish && existingToc.length > 0) {
             prompt += `\n\nThe PDF already has these bookmarks. Use them as a base to refine and improve:\n${JSON.stringify(existingToc)}`;
@@ -184,9 +208,12 @@ CRITICAL RULES FOR CHUNK MODE:
 2. If you see "Page 1" printed on a page, that page is actually page ${chunkStart} in the full document.
 3. To calculate the correct page_number: take the page position within this chunk (1-indexed) and add ${chunkStart - 1}.
    Example: The 5th page in this chunk = page ${chunkStart + 4} in the full document.
-4. ONLY output bookmarks for content in this chunk (pages ${chunkStart}-${chunkEnd}).
-5. For page_label_ranges: report ranges relative to the FULL document (not this chunk).
-6. Use the SAME JSON format as always.`;
+4. ONLY output bookmarks for content in this chunk (pages ${chunkStart}-${chunkEnd}).`;
+
+            if (shouldSetPageLabel) {
+                prompt += `\n5. For page_label_ranges: report ranges relative to the FULL document (not this chunk).`;
+            }
+            prompt += `\n6. Use the SAME JSON format as always.`;
         }
 
         return prompt;
@@ -638,7 +665,40 @@ CRITICAL RULES FOR CHUNK MODE:
         const apiKey = this.getApiKey();
         const baseUrl = this.getBaseUrl();
         const model = this.getModel();
+        const shouldSetPageLabel = this.shouldSetPageLabel();
         const prompt = this.buildPrompt(existingToc, opts);
+
+        // 根据设置动态构建 response schema
+        const schemaProperties = {
+            bookmarks: {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        title: { type: "string" },
+                        page_number: { type: "integer" },
+                        level: { type: "integer" }
+                    },
+                    required: ["title", "page_number", "level"]
+                }
+            }
+        };
+
+        // 只有当启用 page label 时才添加 page_label_ranges 到 schema
+        if (shouldSetPageLabel) {
+            schemaProperties.page_label_ranges = {
+                type: "array",
+                items: {
+                    type: "object",
+                    properties: {
+                        start_page: { type: "integer" },
+                        style: { type: "string" },
+                        start: { type: "integer" }
+                    },
+                    required: ["start_page", "style"]
+                }
+            };
+        }
 
         const requestBody = JSON.stringify({
             contents: [{
@@ -656,32 +716,7 @@ CRITICAL RULES FOR CHUNK MODE:
                 response_mime_type: "application/json",
                 response_schema: {
                     type: "object",
-                    properties: {
-                        bookmarks: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    title: { type: "string" },
-                                    page_number: { type: "integer" },
-                                    level: { type: "integer" }
-                                },
-                                required: ["title", "page_number", "level"]
-                            }
-                        },
-                        page_label_ranges: {
-                            type: "array",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    start_page: { type: "integer" },
-                                    style: { type: "string" },
-                                    start: { type: "integer" }
-                                },
-                                required: ["start_page", "style"]
-                            }
-                        }
-                    },
+                    properties: schemaProperties,
                     required: ["bookmarks"]
                 }
             }
@@ -874,8 +909,10 @@ CRITICAL RULES FOR CHUNK MODE:
         // Load PDF with pdf-lib
         const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
 
-        // Set page labels (roman numerals, etc.) if provided
-        this.setPageLabels(pdfDoc, pageLabelRanges);
+        // Set page labels (roman numerals, etc.) only if enabled in settings
+        if (this.shouldSetPageLabel()) {
+            this.setPageLabels(pdfDoc, pageLabelRanges);
+        }
 
         // Get or create outline
         const { root, ref: rootRef } = this.getOrCreateOutlines(pdfDoc);
