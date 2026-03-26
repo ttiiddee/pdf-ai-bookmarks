@@ -1,5 +1,7 @@
 # My PDF AI Bookmarks for Zotero
 
+This is forked from `https://github.com/edwintuan/pdf-ai-bookmarks`, and revised by vibe coding.
+
 A personal Zotero 8 plugin that automatically generates hierarchical PDF bookmarks (outlines/table of contents) using AI.
 
 ## Features
