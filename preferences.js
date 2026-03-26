@@ -12,7 +12,6 @@ window.PDFAIBookmarks_Preferences = {
         // Load current values
         const currentApiKey = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.apiKey', true);
         const currentBaseUrl = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.baseUrl', true);
-        const currentModel = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.model', true);
         const currentCustomModel = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.customModel', true);
         const currentPolish = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.polish', true);
 
@@ -24,21 +23,21 @@ window.PDFAIBookmarks_Preferences = {
             baseUrlInput.value = currentBaseUrl;
         }
 
-        if (currentModel) {
-            modelSelect.value = currentModel;
-        }
-
-        if (currentCustomModel) {
-            customModelInput.value = currentCustomModel;
-        }
-
-        // Show/hide custom model input
+        // Show/hide custom model input - Zotero manages select value via preference attribute
         const updateCustomModelVisibility = () => {
             const isCustom = modelSelect.value === 'custom';
             customModelRow.hidden = !isCustom;
         };
 
+        // Initial visibility update
         updateCustomModelVisibility();
+
+        // Listen for changes to update visibility
+        modelSelect.addEventListener("change", updateCustomModelVisibility);
+
+        if (currentCustomModel) {
+            customModelInput.value = currentCustomModel;
+        }
 
         if (currentPolish !== undefined) {
             polishCheckbox.checked = currentPolish;
@@ -53,11 +52,6 @@ window.PDFAIBookmarks_Preferences = {
 
         baseUrlInput.addEventListener("input", (e) => {
             Zotero.Prefs.set('extensions.my-pdf-ai-bookmarks.baseUrl', e.target.value, true);
-        });
-
-        modelSelect.addEventListener("change", (e) => {
-            Zotero.Prefs.set('extensions.my-pdf-ai-bookmarks.model', e.target.value, true);
-            updateCustomModelVisibility();
         });
 
         customModelInput.addEventListener("input", (e) => {
