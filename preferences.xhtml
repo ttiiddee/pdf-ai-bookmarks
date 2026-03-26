@@ -26,14 +26,16 @@
 
         <hbox align="center" style="margin-top: 10px;">
             <label value="Model:" control="pdf-ai-bookmarks-model" style="width: 80px;" />
-            <html:select id="pdf-ai-bookmarks-model" preference="extensions.my-pdf-ai-bookmarks.model">
-                <html:option value="gemini-3-flash-preview">Gemini 3 Flash Preview</html:option>
-                <html:option value="gemini-2.5-flash-preview">Gemini 2.5 Flash Preview</html:option>
-                <html:option value="gemini-2.5-pro-preview">Gemini 2.5 Pro Preview</html:option>
-                <html:option value="gemini-2.0-flash">Gemini 2.0 Flash</html:option>
-                <html:option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</html:option>
-                <html:option value="custom">Custom</html:option>
-            </html:select>
+            <menulist id="pdf-ai-bookmarks-model" native="true" preference="extensions.my-pdf-ai-bookmarks.model">
+                <menupopup>
+                    <menuitem label="Gemini 3 Flash Preview" value="gemini-3-flash-preview" />
+                    <menuitem label="Gemini 2.5 Flash Preview" value="gemini-2.5-flash-preview" />
+                    <menuitem label="Gemini 2.5 Pro Preview" value="gemini-2.5-pro-preview" />
+                    <menuitem label="Gemini 2.0 Flash" value="gemini-2.0-flash" />
+                    <menuitem label="Gemini 2.0 Flash Lite" value="gemini-2.0-flash-lite" />
+                    <menuitem label="Custom" value="custom" />
+                </menupopup>
+            </menulist>
         </hbox>
 
         <hbox align="center" style="margin-top: 5px;" id="custom-model-row" hidden="true">
