@@ -109,6 +109,41 @@ PDFAIBookmarks = {
         return btoa(binaryChunks.join(''));
     },
 
+    romanToInt(roman) {
+        const map = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+        let result = 0;
+        const upperRoman = roman.toUpperCase().trim();
+        for (let i = 0; i < upperRoman.length; i++) {
+            const current = map[upperRoman[i]];
+            const next = map[upperRoman[i + 1]];
+            if (next && current < next) {
+                result -= current;
+            } else {
+                result += current;
+            }
+        }
+        return result;
+    },
+
+    isRoman(str) {
+        if (!str || typeof str !== 'string') return false;
+        const romanPattern = /^[IVXLCDMivxlcdm]+$/;
+        return romanPattern.test(str.trim());
+    },
+
+    parsePageNumber(value) {
+        if (value === null || value === undefined) return null;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        const str = String(value).trim();
+        if (!str) return null;
+        const num = Number(str);
+        if (Number.isFinite(num)) return num;
+        if (this.isRoman(str)) {
+            return this.romanToInt(str);
+        }
+        return null;
+    },
+
     buildPrompt(existingToc, opts = {}) {
         const shouldPolish = this.shouldPolish();
         const { totalPages, chunkStart, chunkEnd } = opts;
@@ -120,7 +155,19 @@ Rules:
 2. Generate a list of bookmarks with accurate page numbers.
 3. 'page_number' must be the PHYSICAL page number in the PDF (starting from 1).
 4. 'level' indicates the hierarchy: 1 for chapters, 2 for sections, 3 for subsections.
-5. Output MUST be a valid JSON array matching the schema: [{"title": "Chapter 1", "page_number": 5, "level": 1}, ...]`;
+5. Output MUST be a valid JSON array matching the schema: [{"title": "Chapter 1", "page_number": 5, "level": 1}, ...]
+6. Additionally, include 'page_label_ranges' to describe page numbering patterns (roman numerals, arabic numbers, cover pages without numbers, etc.).
+
+CRITICAL RULES FOR page_label_ranges:
+- Detect cover pages, title pages, and other pages that should NOT display page numbers. Use style "none" for these.
+- The first content page often starts with roman numeral "i" or arabic "1", even if it's not physical page 1.
+- Use "start" field to specify the starting number for each range.
+
+Examples of page_label_ranges:
+- [{"start_page": 1, "style": "none"}, {"start_page": 2, "style": "roman", "start": 1}, {"start_page": 10, "style": "arabic", "start": 1}]
+  // Page 1: cover (no label), Pages 2-9: roman numerals i-viii, Pages 10+: arabic 1, 2, 3...
+- [{"start_page": 1, "style": "roman", "start": 1}, {"start_page": 15, "style": "arabic", "start": 1}]
+  // Pages 1-14: roman numerals i-xiv, Pages 15+: arabic 1, 2, 3...`;
 
         if (shouldPolish && existingToc.length > 0) {
             prompt += `\n\nThe PDF already has these bookmarks. Use them as a base to refine and improve:\n${JSON.stringify(existingToc)}`;
@@ -138,7 +185,8 @@ CRITICAL RULES FOR CHUNK MODE:
 3. To calculate the correct page_number: take the page position within this chunk (1-indexed) and add ${chunkStart - 1}.
    Example: The 5th page in this chunk = page ${chunkStart + 4} in the full document.
 4. ONLY output bookmarks for content in this chunk (pages ${chunkStart}-${chunkEnd}).
-5. Use the SAME JSON format as always: [{"title": "...", "page_number": X, "level": Y}, ...]`;
+5. For page_label_ranges: report ranges relative to the FULL document (not this chunk).
+6. Use the SAME JSON format as always.`;
         }
 
         return prompt;
@@ -434,15 +482,17 @@ CRITICAL RULES FOR CHUNK MODE:
             newBookmarks = await this.generateBookmarksChunked(pdfDoc, existingToc, onProgress, len, MAX_INLINE_BYTES);
         }
 
-        this.log(`Gemini generated ${newBookmarks.length} bookmarks`);
+        this.log(`Gemini generated ${newBookmarks.bookmarks ? newBookmarks.bookmarks.length : 0} bookmarks`);
+        const bookmarksArray = newBookmarks.bookmarks || [];
+        const pageLabelRanges = newBookmarks.page_label_ranges || [];
 
         if (onProgress) onProgress(85, "Writing bookmarks to PDF...");
         // Apply bookmarks to PDF
-        await this.applyBookmarks(pdfPath, pdfBytes, newBookmarks);
+        await this.applyBookmarks(pdfPath, pdfBytes, bookmarksArray, pageLabelRanges);
 
         this.log("Bookmarks applied successfully");
         if (onProgress) onProgress(100, "Done");
-        return newBookmarks.length;
+        return bookmarksArray.length;
     },
 
     extractTOC(pdfDoc) {
@@ -525,24 +575,40 @@ CRITICAL RULES FOR CHUNK MODE:
             if (onProgress) onProgress(progress, `Uploading chunk ${idx + 1}/${chunkTotal} (${base64SizeMB}MB)...`);
 
             this.log(`Sending chunk ${idx+1} to Gemini API...`);
-            const chunkBookmarks = await this.callGeminiAPI(base64Pdf, existingToc, {
+            const chunkResult = await this.callGeminiAPI(base64Pdf, existingToc, {
                 totalPages,
                 chunkStart: start + 1,
                 chunkEnd: end,
                 chunkPages: end - start
             });
-            this.log(`Chunk ${idx+1} returned ${chunkBookmarks.length} bookmarks`);
 
-            return this.normalizeChunkBookmarks(chunkBookmarks, start + 1, end);
+            // Handle new response format
+            const chunkBookmarks = chunkResult.bookmarks || [];
+            const chunkPageLabels = chunkResult.page_label_ranges || [];
+
+            this.log(`Chunk ${idx+1} returned ${chunkBookmarks.length} bookmarks, ${chunkPageLabels.length} page label ranges`);
+
+            return {
+                bookmarks: this.normalizeChunkBookmarks(chunkBookmarks, start + 1, end),
+                page_label_ranges: chunkPageLabels
+            };
         });
 
-        const merged = [];
-        for (const chunkList of results) {
-            if (chunkList && chunkList.length) {
-                merged.push(...chunkList);
+        // Merge bookmarks and collect page label ranges (only from first chunk for full document)
+        const mergedBookmarks = [];
+        let mergedPageLabels = [];
+
+        for (const chunkResult of results) {
+            if (chunkResult.bookmarks && chunkResult.bookmarks.length) {
+                mergedBookmarks.push(...chunkResult.bookmarks);
+            }
+            // Use page labels from first chunk (they should cover the full document)
+            if (mergedPageLabels.length === 0 && chunkResult.page_label_ranges && chunkResult.page_label_ranges.length) {
+                mergedPageLabels = chunkResult.page_label_ranges;
             }
         }
-        return merged;
+
+        return { bookmarks: mergedBookmarks, page_label_ranges: mergedPageLabels };
     },
 
     getOrCreateOutlines(pdfDoc) {
@@ -589,16 +655,34 @@ CRITICAL RULES FOR CHUNK MODE:
             generationConfig: {
                 response_mime_type: "application/json",
                 response_schema: {
-                    type: "array",
-                    items: {
-                        type: "object",
-                        properties: {
-                            title: { type: "string" },
-                            page_number: { type: "integer" },
-                            level: { type: "integer" }
+                    type: "object",
+                    properties: {
+                        bookmarks: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    title: { type: "string" },
+                                    page_number: { type: "integer" },
+                                    level: { type: "integer" }
+                                },
+                                required: ["title", "page_number", "level"]
+                            }
                         },
-                        required: ["title", "page_number", "level"]
-                    }
+                        page_label_ranges: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    start_page: { type: "integer" },
+                                    style: { type: "string" },
+                                    start: { type: "integer" }
+                                },
+                                required: ["start_page", "style"]
+                            }
+                        }
+                    },
+                    required: ["bookmarks"]
                 }
             }
         });
@@ -637,7 +721,16 @@ CRITICAL RULES FOR CHUNK MODE:
 
                 const data = JSON.parse(result.text);
                 const textContent = data.candidates[0].content.parts[0].text;
-                return JSON.parse(textContent);
+                const parsed = JSON.parse(textContent);
+                // Handle new response format with bookmarks and page_label_ranges
+                if (parsed && Array.isArray(parsed.bookmarks)) {
+                    return parsed;
+                }
+                // Fallback for old format (direct array)
+                if (Array.isArray(parsed)) {
+                    return { bookmarks: parsed, page_label_ranges: [] };
+                }
+                return { bookmarks: [], page_label_ranges: [] };
 
             } catch (e) {
                 lastError = e;
@@ -657,6 +750,84 @@ CRITICAL RULES FOR CHUNK MODE:
         }
 
         throw lastError;
+    },
+
+    setPageLabels(pdfDoc, pageLabelRanges) {
+        if (!pageLabelRanges || !Array.isArray(pageLabelRanges) || pageLabelRanges.length === 0) {
+            return;
+        }
+
+        const context = pdfDoc.context;
+        const nums = [];
+
+        for (const range of pageLabelRanges) {
+            const startPage = Number(range.start_page);
+            const style = String(range.style || 'arabic').toLowerCase();
+
+            if (!Number.isFinite(startPage) || startPage < 1) continue;
+
+            // Convert 1-indexed page number to 0-indexed for PDF internal
+            const pageIndex = startPage - 1;
+
+            // Handle "none" style for cover pages without page numbers
+            if (style === 'none') {
+                // For pages without labels, we still register the range
+                // but without an 'S' (style) key - this effectively hides page numbers
+                const labelDict = context.obj({});
+                nums.push(PDFLib.PDFNumber.of(pageIndex), labelDict);
+                continue;
+            }
+
+            // PDF Page Label styles:
+            // /D = Decimal (1, 2, 3...)
+            // /r = Lowercase roman (i, ii, iii...)
+            // /R = Uppercase roman (I, II, III...)
+            // /a = Lowercase letters (a, b, c...)
+            // /A = Uppercase letters (A, B, C...)
+            let styleName;
+            switch (style) {
+                case 'roman':
+                case 'roman_lowercase':
+                    styleName = 'r';
+                    break;
+                case 'roman_uppercase':
+                    styleName = 'R';
+                    break;
+                case 'alpha':
+                case 'alpha_lowercase':
+                    styleName = 'a';
+                    break;
+                case 'alpha_uppercase':
+                    styleName = 'A';
+                    break;
+                case 'arabic':
+                case 'decimal':
+                default:
+                    styleName = 'D';
+                    break;
+            }
+
+            const labelDict = context.obj({
+                S: PDFLib.PDFName.of(styleName)
+            });
+
+            // Support custom starting number (e.g., roman starting from 1, or page 10 starting from 1)
+            const startNumber = Number(range.start);
+            if (Number.isFinite(startNumber) && startNumber >= 1) {
+                labelDict.set(PDFLib.PDFName.of('St'), PDFLib.PDFNumber.of(startNumber));
+            }
+
+            nums.push(PDFLib.PDFNumber.of(pageIndex), labelDict);
+        }
+
+        if (nums.length === 0) return;
+
+        const pageLabels = context.obj({
+            Nums: context.obj(nums)
+        });
+
+        pdfDoc.catalog.set(PDFLib.PDFName.of('PageLabels'), pageLabels);
+        this.log(`Set page labels with ${nums.length / 2} ranges`);
     },
 
     async callGeminiAPIWithFile(fileUri, existingToc, opts = {}) {
@@ -699,9 +870,12 @@ CRITICAL RULES FOR CHUNK MODE:
         return JSON.parse(textContent);
     },
 
-    async applyBookmarks(pdfPath, pdfBytes, bookmarks) {
+    async applyBookmarks(pdfPath, pdfBytes, bookmarks, pageLabelRanges = []) {
         // Load PDF with pdf-lib
         const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
+
+        // Set page labels (roman numerals, etc.) if provided
+        this.setPageLabels(pdfDoc, pageLabelRanges);
 
         // Get or create outline
         const { root, ref: rootRef } = this.getOrCreateOutlines(pdfDoc);
