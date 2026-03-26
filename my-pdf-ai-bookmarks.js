@@ -1,4 +1,4 @@
-// PDF AI Bookmarks - Pure JavaScript Implementation
+// My PDF AI Bookmarks - Personal Zotero Plugin
 
 PDFAIBookmarks = {
     id: null,
@@ -18,11 +18,26 @@ PDFAIBookmarks = {
 
 
     getApiKey() {
-        return Zotero.Prefs.get('extensions.pdf-ai-bookmarks.apiKey', true);
+        return Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.apiKey', true);
+    },
+
+    getBaseUrl() {
+        const baseUrl = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.baseUrl', true);
+        // Default to Google Gemini if not set
+        return baseUrl && baseUrl.trim() ? baseUrl.trim() : 'https://generativelanguage.googleapis.com';
+    },
+
+    getModel() {
+        const model = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.model', true);
+        if (model === 'custom') {
+            const customModel = Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.customModel', true);
+            return customModel && customModel.trim() ? customModel.trim() : 'gemini-3-flash-preview';
+        }
+        return model || 'gemini-3-flash-preview';
     },
 
     shouldPolish() {
-        return Zotero.Prefs.get('extensions.pdf-ai-bookmarks.polish', true) !== false;
+        return Zotero.Prefs.get('extensions.my-pdf-ai-bookmarks.polish', true) !== false;
     },
 
     normalizePath(path) {
@@ -555,6 +570,8 @@ CRITICAL RULES FOR CHUNK MODE:
 
     async callGeminiAPI(base64Pdf, existingToc, opts = {}) {
         const apiKey = this.getApiKey();
+        const baseUrl = this.getBaseUrl();
+        const model = this.getModel();
         const prompt = this.buildPrompt(existingToc, opts);
 
         const requestBody = JSON.stringify({
@@ -586,6 +603,11 @@ CRITICAL RULES FOR CHUNK MODE:
             }
         });
 
+        // Build API URL based on configured base URL and model
+        // For AIHubMix and other proxies, the path structure may differ
+        const apiUrl = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        this.log(`Calling API at: ${baseUrl} with model: ${model}`);
+
         // Retry logic for transient network errors
         const MAX_RETRIES = 3;
         let lastError = null;
@@ -595,7 +617,7 @@ CRITICAL RULES FOR CHUNK MODE:
                 // Use XMLHttpRequest instead of fetch for better reliability with large payloads
                 const result = await new Promise((resolve, reject) => {
                     const xhr = new XMLHttpRequest();
-                    xhr.open('POST', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=' + apiKey, true);
+                    xhr.open('POST', apiUrl, true);
                     xhr.setRequestHeader('Content-Type', 'application/json');
                     xhr.timeout = 5 * 60 * 1000; // 5 minute timeout
 
@@ -603,7 +625,7 @@ CRITICAL RULES FOR CHUNK MODE:
                         if (xhr.status >= 200 && xhr.status < 300) {
                             resolve({ status: xhr.status, text: xhr.responseText });
                         } else {
-                            reject(new Error(`Gemini API error: ${xhr.status} - ${xhr.responseText}`));
+                            reject(new Error(`API error: ${xhr.status} - ${xhr.responseText}`));
                         }
                     };
                     xhr.onerror = () => reject(new Error(`NetworkError (XHR): readyState=${xhr.readyState}, status=${xhr.status}`));
@@ -639,9 +661,12 @@ CRITICAL RULES FOR CHUNK MODE:
 
     async callGeminiAPIWithFile(fileUri, existingToc, opts = {}) {
         const apiKey = this.getApiKey();
+        const baseUrl = this.getBaseUrl();
         const prompt = this.buildPrompt(existingToc, opts);
 
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + apiKey, {
+        const apiUrl = `${baseUrl}/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+        const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -666,7 +691,7 @@ CRITICAL RULES FOR CHUNK MODE:
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
+            throw new Error(`API error: ${response.status} - ${errorText}`);
         }
 
         const data = await response.json();

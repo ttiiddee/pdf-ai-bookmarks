@@ -1,7 +1,7 @@
 var PDFAIBookmarks;
 
 function log(msg) {
-    Zotero.debug("PDF AI Bookmarks: " + msg);
+    Zotero.debug("My PDF AI Bookmarks: " + msg);
 }
 
 function install() {
@@ -13,7 +13,7 @@ async function startup({ id, version, rootURI }) {
 
     // Register preferences pane
     Zotero.PreferencePanes.register({
-        pluginID: 'pdf-ai-bookmarks@antigravity.com',
+        pluginID: 'my-pdf-ai-bookmarks@custom.com',
         src: rootURI + 'preferences.xhtml',
         scripts: [rootURI + 'preferences.js']
     });
@@ -22,7 +22,7 @@ async function startup({ id, version, rootURI }) {
     Services.scriptloader.loadSubScript(rootURI + 'lib/pdf-lib.js');
 
     // Load main plugin logic
-    Services.scriptloader.loadSubScript(rootURI + 'pdf-ai-bookmarks.js');
+    Services.scriptloader.loadSubScript(rootURI + 'my-pdf-ai-bookmarks.js');
     PDFAIBookmarks.init({ id, version, rootURI });
     PDFAIBookmarks.addToAllWindows();
 }

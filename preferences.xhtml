@@ -1,6 +1,6 @@
 <vbox onload="PDFAIBookmarks_Preferences.init()">
     <linkset>
-        <html:link rel="localization" href="pdf-ai-bookmarks.ftl" />
+        <html:link rel="localization" href="my-pdf-ai-bookmarks.ftl" />
     </linkset>
 
     <html:style>
@@ -14,12 +14,36 @@
 
         <hbox align="center">
             <label value="API Key:" control="pdf-ai-bookmarks-api-key" style="width: 80px;" />
-            <html:input id="pdf-ai-bookmarks-api-key" type="password" placeholder="Enter your Gemini API key"
-                preference="extensions.pdf-ai-bookmarks.apiKey" />
+            <html:input id="pdf-ai-bookmarks-api-key" type="password" placeholder="Enter your API key"
+                preference="extensions.my-pdf-ai-bookmarks.apiKey" />
+        </hbox>
+
+        <hbox align="center" style="margin-top: 10px;">
+            <label value="Base URL:" control="pdf-ai-bookmarks-base-url" style="width: 80px;" />
+            <html:input id="pdf-ai-bookmarks-base-url" type="text" placeholder="https://generativelanguage.googleapis.com"
+                preference="extensions.my-pdf-ai-bookmarks.baseUrl" />
+        </hbox>
+
+        <hbox align="center" style="margin-top: 10px;">
+            <label value="Model:" control="pdf-ai-bookmarks-model" style="width: 80px;" />
+            <html:select id="pdf-ai-bookmarks-model" preference="extensions.my-pdf-ai-bookmarks.model">
+                <html:option value="gemini-3-flash-preview">Gemini 3 Flash Preview</html:option>
+                <html:option value="gemini-2.5-flash-preview">Gemini 2.5 Flash Preview</html:option>
+                <html:option value="gemini-2.5-pro-preview">Gemini 2.5 Pro Preview</html:option>
+                <html:option value="gemini-2.0-flash">Gemini 2.0 Flash</html:option>
+                <html:option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</html:option>
+                <html:option value="custom">Custom</html:option>
+            </html:select>
+        </hbox>
+
+        <hbox align="center" style="margin-top: 5px;" id="custom-model-row" hidden="true">
+            <label value="Custom:" control="pdf-ai-bookmarks-custom-model" style="width: 80px;" />
+            <html:input id="pdf-ai-bookmarks-custom-model" type="text" placeholder="model-name"
+                preference="extensions.my-pdf-ai-bookmarks.customModel" />
         </hbox>
 
         <description style="color: gray; font-size: 0.9em; margin-top: 5px;">
-            Get your API key from: https://aistudio.google.com/app/apikey
+            Default: Google Gemini (https://generativelanguage.googleapis.com). For AIHubMix, use: https://aihubmix.com/gemini
         </description>
     </groupbox>
 
@@ -29,6 +53,6 @@
         </label>
 
         <checkbox id="pdf-ai-bookmarks-polish" label="Polish existing bookmarks (if present)"
-            preference="extensions.pdf-ai-bookmarks.polish" />
+            preference="extensions.my-pdf-ai-bookmarks.polish" />
     </groupbox>
 </vbox>
